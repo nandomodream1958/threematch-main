@@ -1,0 +1,7 @@
+.test-tile {
+    width: 100px;
+    height: 100px;
+    background-image: url('./images/bomb-1.png');
+    background-size: cover;
+    border: 2px solid black;
+}

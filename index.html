@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3マッチゲーム</title>
+    <link rel="icon" href="./images/favicon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="mode-selection-overlay" class="overlay">
+        <div id="mode-selection-box">
+            <h2>モードを選択</h2>
+            <button id="level-mode-btn" class="mode-btn">レベルモード</button>
+            <button id="time-attack-mode-btn" class="mode-btn">タイムアタック</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="title-container">
+            <h1>スリーマッチゲーム</h1>
+            <div class="version-text">ver.1</div>
+        </div>
+        <div id="score-container">
+            <div>Score: <span id="score" class="score-text">0</span></div>
+            <div id="level-container">Level: <span id="level" class="level-text">1</span></div>
+            <div>High Score: <span id="high-score" class="high-score-text">0</span></div>
+        </div>
+        <div id="objective-container">
+            目標: <span id="objective-text"></span>
+        </div>
+        <div id="timer-container" class="hidden">
+            Time: <span id="timer">60</span>
+        </div>
+        <div id="special-meter-container">
+            <div id="special-meter-bar"></div>
+        </div>
+        <div id="game-board"></div>
+    </div>
+
+    <div id="game-over-overlay" class="hidden overlay">
+        <div id="game-over-box">
+            <h2>Game Over</h2>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <button id="play-again-btn">Play Again</button>
+        </div>
+    </div>
+
+    <audio id="sound-background" src="sounds/background.mp3" loop></audio>
+    <audio id="sound-swap" src="sounds/swap.mp3"></audio>
+    <audio id="sound-match" src="sounds/match.mp3"></audio>
+    <audio id="sound-bomb" src="sounds/bomb.mp3"></audio>
+    <audio id="sound-line-bomb" src="sounds/line_bomb.mp3"></audio>
+    <audio id="sound-rainbow-bomb" src="sounds/rainbow_bomb.mp3"></audio>
+    <audio id="sound-level-up" src="sounds/level_up.mp3"></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>
