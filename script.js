@@ -15,6 +15,9 @@ const levelContainer = document.getElementById('level-container');
 const objectiveContainer = document.getElementById('objective-container');
 const timerContainer = document.getElementById('timer-container');
 const timerElement = document.getElementById('timer');
+const badgeContainer = document.getElementById('badge-container');
+const movesContainer = document.getElementById('moves-container');
+const movesLeftElement = document.getElementById('moves-left');
 
 
 // Audio elements
@@ -56,13 +59,19 @@ let selectedTile = null;
 let specialMeter = 0;
 const specialMeterMax = 100;
 let isMusicPlaying = false;
+let movesLeft = 0;
 
 const levels = [
-    { level: 1, objective: { type: 'score', value: 1000 } },
-    { level: 2, objective: { type: 'clearColor', color: 'red', count: 30 } },
-    { level: 3, objective: { type: 'clearColor', color: 'blue', count: 40 } },
-    { level: 4, objective: { type: 'score', value: 5000 } },
-    { level: 5, objective: { type: 'clearColor', color: 'green', count: 50 } },
+    { level: 1, objective: { type: 'score', value: 800 }, moves: 30 },
+    { level: 2, objective: { type: 'clearColor', color: 'red', count: 24 }, moves: 30 },
+    { level: 3, objective: { type: 'clearColor', color: 'blue', count: 32 }, moves: 35 },
+    { level: 4, objective: { type: 'score', value: 4000 }, moves: 35 },
+    { level: 5, objective: { type: 'clearColor', color: 'green', count: 40 }, moves: 40 },
+    { level: 6, objective: { type: 'clearColor', color: 'yellow', count: 48 }, moves: 40 },
+    { level: 7, objective: { type: 'clearColor', color: 'purple', count: 56 }, moves: 45 },
+    { level: 8, objective: { type: 'score', value: 8000 }, moves: 45 },
+    { level: 9, objective: { type: 'clearColor', color: 'orange', count: 64 }, moves: 50 },
+    { level: 10, objective: { type: 'score', value: 12000 }, moves: 50 }
 ];
 
 let currentObjective = {};
@@ -72,11 +81,18 @@ function initializeLevel(level) {
     const levelData = levels.find(l => l.level === level);
     if (levelData) {
         currentObjective = levelData.objective;
+        movesLeft = levelData.moves;
     } else {
         currentObjective = { type: 'score', value: Math.floor(1000 * Math.pow(1.5, level - 1)) };
+        movesLeft = Math.max(15, 50 - (level - 10) * 2); // Decrease moves for higher levels
     }
     objectiveProgress = 0;
     updateObjectiveDisplay();
+    updateMovesDisplay();
+}
+
+function updateMovesDisplay() {
+    movesLeftElement.textContent = movesLeft;
 }
 
 function updateObjectiveDisplay() {
@@ -262,15 +278,18 @@ function startGame(mode) {
     multiplier = 1;
     level = 1;
     specialMeter = 0;
+    badgeContainer.innerHTML = '';
 
     if (gameMode === 'level') {
         levelContainer.classList.remove('hidden');
         objectiveContainer.classList.remove('hidden');
+        movesContainer.classList.remove('hidden');
         timerContainer.classList.add('hidden');
         initializeLevel(level);
     } else { // timeAttack
         levelContainer.classList.add('hidden');
         objectiveContainer.classList.add('hidden');
+        movesContainer.classList.add('hidden');
         timerContainer.classList.remove('hidden');
         timeLeft = 60;
         timerElement.textContent = timeLeft;
@@ -302,6 +321,20 @@ playAgainBtn.addEventListener('click', () => {
     modeSelectionOverlay.classList.remove('hidden');
 });
 
+function checkSwapValidity(row1, col1, row2, col2) {
+    // Temporarily swap the tiles on the board
+    [board[row1][col1], board[row2][col2]] = [board[row2][col2], board[row1][col1]];
+
+    // Check for matches
+    const matchInfo = checkForMatches();
+
+    // Swap back to the original state
+    [board[row1][col1], board[row2][col2]] = [board[row2][col2], board[row1][col1]];
+
+    // A swap is valid only if it creates a match.
+    return matchInfo.toRemove.size > 0;
+}
+
 gameBoard.addEventListener('click', async (e) => {
     if (!isMusicPlaying) {
         soundBackground.play();
@@ -316,11 +349,68 @@ gameBoard.addEventListener('click', async (e) => {
 
     if (selectedTile) {
         const selectedTileElement = document.querySelector(`.tile[data-row='${selectedTile.row}'][data-col='${selectedTile.col}']`);
-        selectedTileElement.classList.remove('selected');
+        if (selectedTileElement) {
+            selectedTileElement.classList.remove('selected');
+        }
 
         if (isAdjacent(row, col, selectedTile.row, selectedTile.col)) {
-            await swapTiles(row, col, selectedTile.row, selectedTile.col);
-            await handleMatches(row, col, selectedTile.row, selectedTile.col);
+            const tile1Type = getTileType(selectedTile.row, selectedTile.col);
+            const tile2Type = getTileType(row, col);
+
+            let isValidMove = false;
+            if (isSpecial(tile1Type) || isSpecial(tile2Type)) {
+                isValidMove = true;
+            } else {
+                isValidMove = checkSwapValidity(row, col, selectedTile.row, selectedTile.col);
+            }
+
+            if (isValidMove) {
+                if (gameMode === 'level') {
+                    movesLeft--;
+                    updateMovesDisplay();
+                }
+
+                await swapTiles(row, col, selectedTile.row, selectedTile.col);
+
+                if (isSpecial(tile1Type) && tile1Type.includes('rainbow-bomb')) {
+                    const colorToClear = tile2Type.split('-')[0];
+                    const tilesToClear = new Set();
+                    for (let r = 0; r < boardSize; r++) {
+                        for (let c = 0; c < boardSize; c++) {
+                            if (getTileType(r, c)?.startsWith(colorToClear)) {
+                                tilesToClear.add(`${r}-${c}`);
+                            }
+                        }
+                    }
+                    tilesToClear.add(`${row}-${col}`); // Add the rainbow bomb itself
+                    await runMatchCycle(tilesToClear, []);
+                } else if (isSpecial(tile2Type) && tile2Type.includes('rainbow-bomb')) {
+                    const colorToClear = tile1Type.split('-')[0];
+                    const tilesToClear = new Set();
+                    for (let r = 0; r < boardSize; r++) {
+                        for (let c = 0; c < boardSize; c++) {
+                            if (getTileType(r, c)?.startsWith(colorToClear)) {
+                                tilesToClear.add(`${r}-${c}`);
+                            }
+                        }
+                    }
+                    tilesToClear.add(`${selectedTile.row}-${selectedTile.col}`); // Add the rainbow bomb itself
+                    await runMatchCycle(tilesToClear, []);
+                } else if (isSpecial(tile1Type) && isSpecial(tile2Type)) {
+                    const tilesToClear = handleSpecialTileCombination(tile1Type, tile2Type, row, col, selectedTile.row, selectedTile.col);
+                    await runMatchCycle(tilesToClear, []);
+                } else {
+                    await handleMatches(row, col, selectedTile.row, selectedTile.col);
+                }
+
+                if (gameMode === 'level' && movesLeft <= 0) {
+                    const objectiveMet = (currentObjective.type === 'score' && score >= currentObjective.value) ||
+                                         (currentObjective.type === 'clearColor' && objectiveProgress >= currentObjective.count);
+                    if (!objectiveMet) {
+                        handleGameOver();
+                    }
+                }
+            }
             selectedTile = null;
         } else {
             selectedTile = { row, col };
@@ -333,50 +423,6 @@ gameBoard.addEventListener('click', async (e) => {
 });
 
 async function handleMatches(row1, col1, row2, col2) {
-    const tile1Type = getTileType(row1, col1);
-    const tile2Type = getTileType(row2, col2);
-
-    if (tile1Type === 'rainbow-bomb' && tile2Type === 'rainbow-bomb') {
-        playSound(soundRainbowBomb);
-        createSpecialCombinationParticles(boardPadding + col1 * dynamicTileSlotSize + (dynamicTileSize / 2), boardPadding + row1 * dynamicTileSlotSize + (dynamicTileSize / 2));
-        let tilesToClear = new Set();
-        for (let r = 0; r < boardSize; r++) {
-            for (let c = 0; c < boardSize; c++) {
-                tilesToClear.add(`${r}-${c}`);
-            }
-        }
-        await runMatchCycle(tilesToClear);
-        return;
-    }
-
-    if (tile1Type === 'rainbow-bomb' || tile2Type === 'rainbow-bomb') {
-        playSound(soundRainbowBomb);
-        createSpecialCombinationParticles(boardPadding + col1 * dynamicTileSlotSize + (dynamicTileSize / 2), boardPadding + row1 * dynamicTileSlotSize + (dynamicTileSize / 2));
-        const rainbowBomb = tile1Type === 'rainbow-bomb' ? {r: row1, c: col1} : {r: row2, c: col2};
-        const otherTileColor = tile1Type === 'rainbow-bomb' ? board[row2][col2].split('-')[0] : board[row1][col1].split('-')[0];
-        
-        let tilesToClear = new Set([`${rainbowBomb.r}-${rainbowBomb.c}`]);
-        for (let r = 0; r < boardSize; r++) {
-            for (let c = 0; c < boardSize; c++) {
-                if (board[r][c] && board[r][c].startsWith(otherTileColor)) {
-                    tilesToClear.add(`${r}-${c}`);
-                }
-            }
-        }
-        await runMatchCycle(tilesToClear);
-        return;
-    }
-
-    if (isSpecial(tile1Type) && isSpecial(tile2Type)) {
-        const combinedTilesToClear = handleSpecialTileCombination(tile1Type, tile2Type, row1, col1, row2, col2);
-        if (combinedTilesToClear.size > 0) {
-            board[row1][col1] = null;
-            board[row2][col2] = null;
-            await runMatchCycle(combinedTilesToClear);
-            return;
-        }
-    }
-
     const matchInfo = checkForMatches();
     let tilesToClear = matchInfo.toRemove;
 
@@ -384,23 +430,6 @@ async function handleMatches(row1, col1, row2, col2) {
         setTimeout(async () => { await swapTiles(row1, col1, row2, col2); }, 200);
         return;
     }
-
-    const swappedTile1Pos = `${row1}-${col1}`;
-    const swappedTile2Pos = `${row2}-${col2}`;
-    let creationPos = null;
-    if (tilesToClear.has(swappedTile1Pos)) {
-        creationPos = {row: row1, col: col1};
-    } else if (tilesToClear.has(swappedTile2Pos)) {
-        creationPos = {row: row2, col: col2};
-    }
-
-    if (!creationPos && matchInfo.toCreate.length > 0) {
-        const firstMatchPos = tilesToClear.values().next().value;
-        const [row, col] = firstMatchPos.split('-').map(Number);
-        creationPos = { row, col };
-    }
-
-    matchInfo.toCreate.forEach(st => st.pos = creationPos);
 
     await runMatchCycle(tilesToClear, matchInfo.toCreate);
 }
@@ -594,39 +623,7 @@ function createRandomSpecialTile() {
     }
 }
 
-function createSpecialTiles(tilesToCreate) {
-    if (!tilesToCreate || tilesToCreate.length === 0) return;
 
-    tilesToCreate.forEach(st => {
-        if (st.pos) {
-            const { row, col } = st.pos;
-            const newType = st.type === 'rainbow-bomb' ? 'rainbow-bomb' : `${st.color}-${st.type}`;
-            board[row][col] = newType;
-
-            const tileElement = document.querySelector(`.tile[data-row='${row}'][data-col='${col}']`);
-            if(tileElement) {
-                tileElement.innerHTML = '';
-                tileElement.className = 'tile';
-                tileElement.classList.add('special-tile');
-                if (newType.includes('line-bomb-h')) {
-                    tileElement.classList.add('line-h');
-                    tileElement.style.backgroundColor = st.color;
-                } else if (newType.includes('line-bomb-v')) {
-                    tileElement.classList.add('line-v');
-                    tileElement.style.backgroundColor = st.color;
-                } else if (newType.includes('rainbow-bomb')) {
-                    tileElement.classList.add('rainbow-bomb');
-                    tileElement.style.backgroundColor = '';
-                } else if (newType.includes('bomb')) {
-                    tileElement.classList.add('bomb');
-                    tileElement.style.backgroundColor = st.color;
-                } else {
-                    tileElement.style.backgroundColor = st.color;
-                }
-            }
-        }
-    });
-}
 
 function showScorePopup(score, positions) {
     const popup = document.createElement('div');
@@ -674,8 +671,9 @@ function animateScoreUpdate(startScore, endScore) {
     requestAnimationFrame(update);
 }
 
-async function runMatchCycle(initialTilesToClear, specialTilesToCreate = []) {
+async function runMatchCycle(initialTilesToClear, initialTilesToCreate) {
     let tilesToClear = new Set(initialTilesToClear);
+    let tilesToCreate = initialTilesToCreate || [];
 
     multiplier = 1;
     updateScoreDisplay();
@@ -726,21 +724,13 @@ async function runMatchCycle(initialTilesToClear, specialTilesToCreate = []) {
 
         if (specialMeter >= specialMeterMax) {
             specialMeter -= specialMeterMax;
-            createRandomSpecialTile();
+            // createRandomSpecialTile(); // Temporarily disabled
             updateSpecialMeter();
         }
 
         updateScoreDisplay();
 
-        const creationPositions = new Set();
-        if (specialTilesToCreate.length > 0 && specialTilesToCreate[0].pos) {
-             specialTilesToCreate.forEach(st => creationPositions.add(`${st.pos.row}-${st.pos.col}`));
-        }
-        const finalTilesToRemove = new Set([...tilesToClear].filter(pos => !creationPositions.has(pos)));
-
-        await removeMatches(finalTilesToRemove);
-        await createSpecialTiles(specialTilesToCreate);
-        specialTilesToCreate = [];
+        await removeMatches(tilesToClear, tilesToCreate);
 
         await shiftTilesDown();
         await fillNewTiles();
@@ -748,23 +738,7 @@ async function runMatchCycle(initialTilesToClear, specialTilesToCreate = []) {
         const nextMatchInfo = checkForMatches();
         if (nextMatchInfo.toRemove.size > 0) {
             tilesToClear = nextMatchInfo.toRemove;
-            specialTilesToCreate = nextMatchInfo.toCreate;
-            if (specialTilesToCreate.length > 0) {
-                let cascadeCreationPos = null;
-                for (const pos of tilesToClear) {
-                    const [r, c] = pos.split('-').map(Number);
-                    if (!isSpecial(board[r][c])) {
-                        cascadeCreationPos = { row: r, col: c };
-                        break;
-                    }
-                }
-                if (!cascadeCreationPos) {
-                    const firstMatchPos = tilesToClear.values().next().value;
-                    const [row, col] = firstMatchPos.split('-').map(Number);
-                    cascadeCreationPos = { row, col };
-                }
-                specialTilesToCreate.forEach(st => st.pos = cascadeCreationPos);
-            }
+            tilesToCreate = nextMatchInfo.toCreate;
             multiplier++;
         } else {
             active = false;
@@ -778,9 +752,18 @@ async function runMatchCycle(initialTilesToClear, specialTilesToCreate = []) {
 }
 
 function levelUp() {
+    addBadge(level);
     level++;
     initializeLevel(level);
     showLevelUpPopup();
+}
+
+function addBadge(level) {
+    const badge = document.createElement('div');
+    badge.classList.add('badge');
+    badge.textContent = '🏆'; // Use a trophy emoji
+    badge.title = `Level ${level} Cleared`; // Add a tooltip for clarity
+    badgeContainer.appendChild(badge);
 }
 
 async function activateSpecialTiles(tilesToClear) {
@@ -805,6 +788,16 @@ async function activateSpecialTiles(tilesToClear) {
                     for (let r = Math.max(0, row - 1); r <= Math.min(boardSize - 1, row + 1); r++) {
                         for (let c = Math.max(0, col - 1); c <= Math.min(boardSize - 1, c + 1); c++) {
                             affectedTiles.push(`${r}-${c}`);
+                        }
+                    }
+                } else if (tileType.includes('rainbow-bomb')) {
+                    playSound(soundRainbowBomb);
+                    const randomColor = tileTypes[Math.floor(Math.random() * tileTypes.length)];
+                    for (let r = 0; r < boardSize; r++) {
+                        for (let c = 0; c < boardSize; c++) {
+                            if (getTileType(r, c)?.startsWith(randomColor)) {
+                                affectedTiles.push(`${r}-${c}`);
+                            }
                         }
                     }
                 }
@@ -872,14 +865,44 @@ function createSpecialCombinationParticles(x, y) {
     setTimeout(() => { shockwave.remove(); }, 500);
 }
 
-function removeMatches(tilesToRemove) {
+function removeMatches(tilesToRemove, tilesToCreate) {
+    const specialPositions = new Set((tilesToCreate || []).map(st => `${st.pos.row}-${st.pos.col}`));
+
     tilesToRemove.forEach(pos => {
         const [row, col] = pos.split('-').map(Number);
         const tile = document.querySelector(`.tile[data-row='${row}'][data-col='${col}']`);
-        if (tile) {
-            createParticles(boardPadding + col * dynamicTileSlotSize + (dynamicTileSize / 2), boardPadding + row * dynamicTileSlotSize + (dynamicTileSize / 2), tile.style.backgroundColor);
-            tile.classList.add('disappearing');
-            board[row][col] = null;
+
+        if (specialPositions.has(pos)) {
+            // This is a special tile, update it
+            const st = tilesToCreate.find(st => st.pos.row == row && st.pos.col == col);
+            if (tile && st) {
+                const newType = st.type === 'rainbow-bomb' ? 'rainbow-bomb' : `${st.color}-${st.type}`;
+                board[row][col] = newType;
+                tile.innerHTML = '';
+                tile.className = 'tile'; // Reset class
+                tile.classList.add('special-tile');
+
+                if (st.type === 'line-bomb-h') {
+                    tile.classList.add('line-h');
+                    tile.style.backgroundColor = st.color;
+                } else if (st.type === 'line-bomb-v') {
+                    tile.classList.add('line-v');
+                    tile.style.backgroundColor = st.color;
+                } else if (st.type === 'rainbow-bomb') {
+                    tile.classList.add('rainbow-bomb');
+                    tile.style.backgroundColor = '';
+                } else if (st.type === 'bomb') {
+                    tile.classList.add('bomb');
+                    tile.style.backgroundColor = st.color;
+                }
+            }
+        } else {
+            // This is a normal tile, remove it
+            if (tile) {
+                createParticles(boardPadding + col * dynamicTileSlotSize + (dynamicTileSize / 2), boardPadding + row * dynamicTileSlotSize + (dynamicTileSize / 2), tile.style.backgroundColor);
+                tile.classList.add('disappearing');
+                board[row][col] = null;
+            }
         }
     });
 
@@ -943,78 +966,77 @@ function checkForMatches() {
     const toRemove = new Set();
     const toCreate = [];
     const colorBoard = board.map(row => row.map(tile => tile ? tile.split('-')[0] : null));
+    
+    // Find L and T shapes first
+    for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+            if (!colorBoard[r][c]) continue;
 
-    const horizontalChains = [];
-    const verticalChains = [];
+            const centerColor = colorBoard[r][c];
+            const hMatch = [{r, c}];
+            // Check right
+            for (let i = c + 1; i < boardSize && colorBoard[r][i] === centerColor; i++) hMatch.push({r, c: i});
+            // Check left
+            for (let i = c - 1; i >= 0 && colorBoard[r][i] === centerColor; i--) hMatch.unshift({r, c: i});
+
+            const vMatch = [{r, c}];
+            // Check down
+            for (let i = r + 1; i < boardSize && colorBoard[i][c] === centerColor; i++) vMatch.push({r: i, c});
+            // Check up
+            for (let i = r - 1; i >= 0 && colorBoard[i][c] === centerColor; i--) vMatch.unshift({r: i, c});
+
+            if (hMatch.length >= 3 && vMatch.length >= 3) {
+                hMatch.forEach(p => toRemove.add(`${p.r}-${p.c}`));
+                vMatch.forEach(p => toRemove.add(`${p.r}-${p.c}`));
+                toCreate.push({ pos: { row: r, col: c }, color: centerColor, type: 'bomb' });
+            }
+        }
+    }
+
+    // Find straight line matches, avoiding tiles already part of a bomb
+    const visited = Array(boardSize).fill(false).map(() => Array(boardSize).fill(false));
+    toRemove.forEach(pos => {
+        const [r, c] = pos.split('-').map(Number);
+        visited[r][c] = true;
+    });
 
     for (let r = 0; r < boardSize; r++) {
-        for (let c = 0; c < boardSize - 2; c++) {
-            if (!colorBoard[r][c]) continue;
-            let chain = [{r,c}];
-            for (let k = c + 1; k < boardSize; k++) {
-                if (colorBoard[r][k] === colorBoard[r][c]) chain.push({r,c:k});
-                else break;
-            }
-            if (chain.length >= 3) {
-                horizontalChains.push(chain);
-                c += chain.length - 1;
-            }
-        }
-    }
+        for (let c = 0; c < boardSize; c++) {
+            if (!colorBoard[r][c] || visited[r][c]) continue;
 
-    for (let c = 0; c < boardSize; c++) {
-        for (let r = 0; r < boardSize - 2; r++) {
-            if (!colorBoard[r][c]) continue;
-            let chain = [{r,c}];
-            for (let k = r + 1; k < boardSize; k++) {
-                if (colorBoard[k][c] === colorBoard[r][c]) chain.push({r:k,c});
-                else break;
+            const hMatch = [];
+            for (let i = c; i < boardSize && colorBoard[r][i] === colorBoard[r][c]; i++) hMatch.push({r, c: i});
+
+            if (hMatch.length >= 3) {
+                hMatch.forEach(p => toRemove.add(`${p.r}-${p.c}`));
+                if (hMatch.length >= 5) {
+                    toCreate.push({ pos: { row: r, col: c + 2 }, color: colorBoard[r][c], type: 'rainbow-bomb' });
+                } else if (hMatch.length === 4) {
+                    toCreate.push({ pos: { row: r, col: c + 1 }, color: colorBoard[r][c], type: 'line-bomb-h' });
+                }
+                hMatch.forEach(p => visited[p.r][p.c] = true);
             }
-            if (chain.length >= 3) {
-                verticalChains.push(chain);
-                r += chain.length - 1;
-            }
-        }
-    }
-
-    const allChains = [...horizontalChains, ...verticalChains];
-    const processedChains = new Set();
-
-    for (const hChain of horizontalChains) {
-        for (const vChain of verticalChains) {
-            const hSet = new Set(hChain.map(p => `${p.r}-${p.c}`));
-            const vSet = new Set(vChain.map(p => `${p.r}-${p.c}`));
-            const intersection = new Set([...hSet].filter(x => vSet.has(x)));
-            if (intersection.size > 0) {
-                const color = colorBoard[hChain[0].r][hChain[0].c];
-                toCreate.push({type: 'bomb', color: color});
-                const hChainStr = hChain.map(p => `${p.r}-${p.c}`).join(',');
-                const vChainStr = vChain.map(p => `${p.r}-${p.c}`).join(',');
-                processedChains.add(hChainStr);
-                processedChains.add(vChainStr);
-            }
-        }
-    }
-
-    for (const chain of allChains) {
-        const chainString = chain.map(p => `${p.r}-${p.c}`).join(',');
-        if (processedChains.has(chainString)) continue;
-
-        const color = colorBoard[chain[0].r][chain[0].c];
-        if (chain.length === 4) {
-            const type = horizontalChains.some(c => c.map(p => `${p.r}-${p.c}`).join(',') === chainString) ? 'line-bomb-h' : 'line-bomb-v';
-            toCreate.push({type, color});
-        } else if (chain.length >= 5) {
-            toCreate.push({type: 'rainbow-bomb', color: 'rainbow'});
         }
     }
     
-    allChains.forEach(chain => {
-        chain.forEach(p => {
-            toRemove.add(`${p.r}-${p.c}`);
-        });
-    });
+    for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+            if (!colorBoard[r][c] || visited[r][c]) continue;
 
+            const vMatch = [];
+            for (let i = r; i < boardSize && colorBoard[i][c] === colorBoard[r][c]; i++) vMatch.push({r: i, c});
+
+            if (vMatch.length >= 3) {
+                vMatch.forEach(p => toRemove.add(`${p.r}-${p.c}`));
+                if (vMatch.length >= 5) {
+                    toCreate.push({ pos: { row: r + 2, col: c }, color: colorBoard[r][c], type: 'rainbow-bomb' });
+                } else if (vMatch.length === 4) {
+                    toCreate.push({ pos: { row: r + 1, col: c }, color: colorBoard[r][c], type: 'line-bomb-v' });
+                }
+                vMatch.forEach(p => visited[p.r][p.c] = true);
+            }
+        }
+    }
     return { toRemove, toCreate };
 }
 

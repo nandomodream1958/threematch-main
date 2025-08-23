@@ -1,3 +1,4 @@
+
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700&display=swap');
 
 body {
@@ -406,4 +407,38 @@ h1 {
     font-size: 30px;
     color: white;
     text-shadow: 0 0 5px black;
+}
+
+.special-tile.line-h, .special-tile.line-v, .special-tile.bomb {
+    animation: special-tile-pulse 1.5s infinite;
+}
+
+@keyframes special-tile-pulse {
+    0%, 100% {
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(255, 255, 255, 1);
+    }
+}
+
+#badge-container {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    gap: 5px;
+}
+
+.badge {
+    width: 40px; /* Increased size */
+    height: 40px; /* Increased size */
+    background-color: transparent; /* Remove background */
+    border: none; /* Remove border */
+    border-radius: 0; /* Remove border-radius */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 30px; /* Increase font size for the emoji */
+    text-shadow: 0 0 5px rgba(0,0,0,0.3); /* Add shadow for better visibility */
 }
