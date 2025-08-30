@@ -60,6 +60,7 @@ let specialMeter = 0;
 const specialMeterMax = 100;
 let isMusicPlaying = false;
 let movesLeft = 0;
+let isAnimating = false;
 
 const levels = [
     { level: 1, objective: { type: 'score', value: 800 }, moves: 30 },
@@ -164,6 +165,14 @@ function handleGameOver() {
 }
 
 function checkForPossibleMoves() {
+    for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+            if (isSpecial(board[r][c])) {
+                return true;
+            }
+        }
+    }
+
     const tempBoard = board.map(row => [...row]);
 
     function checkMatchesOnTempBoard(tempB) {
@@ -336,6 +345,7 @@ function checkSwapValidity(row1, col1, row2, col2) {
 }
 
 gameBoard.addEventListener('click', async (e) => {
+    if (isAnimating) return;
     if (!isMusicPlaying) {
         soundBackground.play();
         isMusicPlaying = true;
@@ -365,6 +375,7 @@ gameBoard.addEventListener('click', async (e) => {
             }
 
             if (isValidMove) {
+                isAnimating = true;
                 if (gameMode === 'level') {
                     movesLeft--;
                     updateMovesDisplay();
@@ -410,6 +421,7 @@ gameBoard.addEventListener('click', async (e) => {
                         handleGameOver();
                     }
                 }
+                isAnimating = false;
             }
             selectedTile = null;
         } else {
@@ -427,7 +439,10 @@ async function handleMatches(row1, col1, row2, col2) {
     let tilesToClear = matchInfo.toRemove;
 
     if (tilesToClear.size === 0) {
-        setTimeout(async () => { await swapTiles(row1, col1, row2, col2); }, 200);
+        setTimeout(async () => {
+            await swapTiles(row1, col1, row2, col2);
+            isAnimating = false;
+        }, 200);
         return;
     }
 
@@ -679,7 +694,11 @@ async function runMatchCycle(initialTilesToClear, initialTilesToCreate) {
     updateScoreDisplay();
 
     let active = true;
-    while (active) {
+    let loopCounter = 0;
+    const maxLoopIterations = 100; // Add a safeguard against infinite loops
+
+    while (active && loopCounter < maxLoopIterations) {
+        loopCounter++;
         if (multiplier > 1) {
             showComboPopup(multiplier);
             gameBoard.classList.add('board-shaking');
@@ -744,11 +763,15 @@ async function runMatchCycle(initialTilesToClear, initialTilesToCreate) {
             active = false;
         }
     }
+    if (loopCounter >= maxLoopIterations) {
+        console.warn("runMatchCycle exited due to reaching max iterations. This might indicate an issue.");
+    }
     multiplier = 1;
 
     if (!checkForPossibleMoves()) {
         handleGameOver();
     }
+    isAnimating = false;
 }
 
 function levelUp() {
